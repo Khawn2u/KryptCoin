@@ -1,0 +1,16 @@
+{
+  "name": "kryptcoin",
+  "description": "KryptCoin Cryptocurrency example and API",
+  "version": "0.0.1",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Khawn2u/Crypt/"
+  },
+  "dependencies": {
+    "khawn2u-crypt":"1.0.0"
+  },
+  "keywords": ["Cryptocurrency"],
+  "author": "Khawn2u",
+  "homepage": "https://github.com/Khawn2u/Crypt/"
+}
