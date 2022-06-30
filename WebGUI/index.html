@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<!-- saved from url=(0064)https://www.w3schools.com/w3css/tryw3css_templates_analytics.htm -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>KryptCoin Home</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="./w3.css">
+<style>
+html,body,h1,h2,h3,h4,h5 {font-family: "Raleway", sans-serif}
+html,body {
+  padding:0;
+  margin:0;
+}
+.contact {
+  background-color: #1f1f1f;
+}
+.contact:hover {
+  background-color: #3f3f3f;
+}
+.msg {
+  background-color: #2f2f2f;
+}
+.msg:hover {
+  background-color: #3f3f3f;
+}
+</style>
+</head>
+<body bgcolor="#2f2f2f" style="color: white;">
+
+<!-- Top container -->
+<div class="w3-bar w3-top w3-black w3-large" style="z-index:4">
+  <button class="w3-bar-item w3-button w3-hide-large w3-hover-none w3-hover-text-light-grey" onclick="w3_open();">&nbsp;Menu</button>
+  <span class="w3-bar-item w3-right">KryptCoin</span>
+</div>
+
+<!-- Sidebar/menu -->
+<nav class="w3-sidebar w3-black w3-animate-left" style="z-index:3;width:300px;" id="mySidebar"><br>
+  <div class="w3-container w3-row">
+    <div class="w3-col s8 w3-bar">
+      <span>Welcome</span><br>
+    </div>
+  </div>
+  <hr>
+  <div class="w3-container">
+    <h5>Dashboard</h5>
+  </div>
+  <div class="w3-bar-block">
+    <a href="#" class="w3-bar-item w3-button w3-padding-16 w3-hide-large w3-dark-grey w3-hover-black" onclick="w3_close()" title="close menu"><i class="fa fa-remove fa-fw"></i>&nbsp; Close Menu</a>
+    <a class="w3-bar-item w3-button w3-padding" onclick="updateView(0)"><i class="fa fa-users fa-fw"></i>&nbsp; Overview</a>
+    <a class="w3-bar-item w3-button w3-padding" onclick="updateView(1)"><i class="fa fa-eye fa-fw"></i>&nbsp; Chat</a>
+    <a class="w3-bar-item w3-button w3-padding" onclick="updateView(2)"><i class="fa fa-users fa-fw"></i>&nbsp; Files</a>
+    <a class="w3-bar-item w3-button w3-padding" onclick="updateView(3)"><i class="fa fa-bullseye fa-fw"></i>&nbsp; Contacts</a>
+    <a class="w3-bar-item w3-button w3-padding" onclick="updateView(4)"><i class="fa fa-cog fa-fw"></i>&nbsp; Settings</a><br><br>
+  </div>
+</nav>
+
+
+<!-- Overlay effect when opening sidebar on small screens -->
+<div class="w3-overlay w3-hide-large w3-animate-opacity" onclick="w3_close()" style="cursor:pointer" title="close side menu" id="myOverlay"></div>
+
+<!-- !PAGE CONTENT! -->
+<div class="w3-main" style="margin-left:300px;margin-top:43px;">
+  <div id="Overview" style="display: none;">
+    <div class="w3-row-padding w3-margin-bottom">
+      <div class="w3-quarter">
+        <div class="w3-container w3-red w3-padding-16">
+          <div class="w3-left"><i class="fa fa-comment w3-xxxlarge"></i></div>
+          <div class="w3-right">
+            <h3>52</h3>
+          </div>
+          <div class="w3-clear"></div>
+          <h4>Messages</h4>
+        </div>
+      </div>
+      <div class="w3-quarter">
+        <div class="w3-container w3-blue w3-padding-16">
+          <div class="w3-left"><i class="fa fa-eye w3-xxxlarge"></i></div>
+          <div class="w3-right">
+            <h3>99</h3>
+          </div>
+          <div class="w3-clear"></div>
+          <h4>Views</h4>
+        </div>
+      </div>
+      <div class="w3-quarter">
+        <div class="w3-container w3-teal w3-padding-16">
+          <div class="w3-left"><i class="fa fa-share-alt w3-xxxlarge"></i></div>
+          <div class="w3-right">
+            <h3>23</h3>
+          </div>
+          <div class="w3-clear"></div>
+          <h4>Shares</h4>
+        </div>
+      </div>
+      <div class="w3-quarter">
+        <div class="w3-container w3-orange w3-text-white w3-padding-16">
+          <div class="w3-left"><i class="fa fa-users w3-xxxlarge"></i></div>
+          <div class="w3-right">
+            <h3>50</h3>
+          </div>
+          <div class="w3-clear"></div>
+          <h4>Users</h4>
+        </div>
+      </div>
+    </div>
+  
+    <div class="w3-panel">
+      <div class="w3-row-padding" style="margin:0 -16px">
+        <div>
+          <h5>Feeds</h5>
+          <table class="w3-table w3-striped w3-white">
+            <tbody><tr>
+              <td><i class="fa fa-user w3-text-blue w3-large"></i></td>
+              <td>New record, over 90 views.</td>
+              <td><i>10 mins</i></td>
+            </tr>
+            <tr>
+              <td><i class="fa fa-bell w3-text-red w3-large"></i></td>
+              <td>Database error.</td>
+              <td><i>15 mins</i></td>
+            </tr>
+            <tr>
+              <td><i class="fa fa-users w3-text-yellow w3-large"></i></td>
+              <td>New record, over 40 users.</td>
+              <td><i>17 mins</i></td>
+            </tr>
+            <tr>
+              <td><i class="fa fa-comment w3-text-red w3-large"></i></td>
+              <td>New comments.</td>
+              <td><i>25 mins</i></td>
+            </tr>
+            <tr>
+              <td><i class="fa fa-bookmark w3-text-blue w3-large"></i></td>
+              <td>Check transactions.</td>
+              <td><i>28 mins</i></td>
+            </tr>
+            <tr>
+              <td><i class="fa fa-laptop w3-text-red w3-large"></i></td>
+              <td>CPU overload.</td>
+              <td><i>35 mins</i></td>
+            </tr>
+            <tr>
+              <td><i class="fa fa-share-alt w3-text-green w3-large"></i></td>
+              <td>New shares.</td>
+              <td><i>39 mins</i></td>
+            </tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+    <hr>
+    <div class="w3-container">
+      <h5>General Stats</h5>
+      <p>New Visitors</p>
+      <div class="w3-grey">
+        <div class="w3-container w3-center w3-padding w3-green" style="width:25%">+25%</div>
+      </div>
+  
+      <p>New Users</p>
+      <div class="w3-grey">
+        <div class="w3-container w3-center w3-padding w3-orange" style="width:50%">50%</div>
+      </div>
+  
+      <p>Bounce Rate</p>
+      <div class="w3-grey">
+        <div class="w3-container w3-center w3-padding w3-red" style="width:75%">75%</div>
+      </div>
+    </div>
+    <hr>
+  
+    <div class="w3-container">
+      <h5>Countries</h5>
+      <table class="w3-table w3-striped w3-bordered w3-border w3-hoverable w3-white">
+        <tbody><tr>
+          <td>United States</td>
+          <td>65%</td>
+        </tr>
+        <tr>
+          <td>UK</td>
+          <td>15.7%</td>
+        </tr>
+        <tr>
+          <td>Russia</td>
+          <td>5.6%</td>
+        </tr>
+        <tr>
+          <td>Spain</td>
+          <td>2.1%</td>
+        </tr>
+        <tr>
+          <td>India</td>
+          <td>1.9%</td>
+        </tr>
+        <tr>
+          <td>France</td>
+          <td>1.5%</td>
+        </tr>
+      </tbody></table><br>
+      <button class="w3-button w3-dark-grey">More Countries &nbsp;<i class="fa fa-arrow-right"></i></button>
+    </div>
+    <hr>
+  
+    <div class="w3-container">
+      <h5>Recent Comments</h5>
+      <div class="w3-row">
+        <div class="w3-col m2 text-center">
+        </div>
+        <div class="w3-col m10 w3-container">
+          <h4>John <span class="w3-opacity w3-medium">Sep 29, 2014, 9:12 PM</span></h4>
+          <p>Keep up the GREAT work! I am cheering for you!! Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p><br>
+        </div>
+      </div>
+  
+      <div class="w3-row">
+        <div class="w3-col m2 text-center">
+        </div>
+        <div class="w3-col m10 w3-container">
+          <h4>Bo <span class="w3-opacity w3-medium">Sep 28, 2014, 10:15 PM</span></h4>
+          <p>Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p><br>
+        </div>
+      </div>
+    </div>
+    <br>
+    <div class="w3-container w3-dark-grey w3-padding-32">
+      <div class="w3-row">
+        <div class="w3-container w3-third">
+          <h5 class="w3-bottombar w3-border-green">Demographic</h5>
+          <p>Language</p>
+          <p>Country</p>
+          <p>City</p>
+        </div>
+        <div class="w3-container w3-third">
+          <h5 class="w3-bottombar w3-border-red">System</h5>
+          <p>Browser</p>
+          <p>OS</p>
+          <p>More</p>
+        </div>
+        <div class="w3-container w3-third">
+          <h5 class="w3-bottombar w3-border-orange">Target</h5>
+          <p>Users</p>
+          <p>Active</p>
+          <p>Geo</p>
+          <p>Interests</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="Chat" style="display: none;">
+    <div style="position:fixed; left:calc(300px); width: calc((100% - 300px) / 1.5); height: calc((100vh - 42px) * 0.1); background-color: #0f0f0f; border-radius: 0 calc((100vh - 42px) * 0.025) calc((100vh - 42px) * 0.025) 0;">
+      <img src="./Null.png" style="height: 100%; float:left;">
+      <div id="SelectedUserName" style="font-size: 3vw; display: inline; padding-left: 2%; word-wrap: none;">No User</div>
+    </div>
+    <div style="overflow-y: auto; overflow-x: hidden; position:fixed; left:calc(300px); width: calc((100% - 300px) / 1.5); height: calc((100vh - 47px) * 0.82); background-color: #1f1f1f; bottom: 8vh;">
+      <div id="Chats">
+      </div>
+    </div>
+    <textarea type="text" id="MsgBox" style="position: fixed; bottom: 0px; width: calc((100% - 300px) / 1.5); height: 8vh; font-size: 3vh; background-color: #2f2f2f; border-width: 3px; border-color: black; resize: none; color: #00ff00;"></textarea>
+    <div id="ChatContacts" style="overflow-y: auto; overflow-x: hidden; position:fixed; right: 0; width: calc((100% - 300px) / 3); height: calc(100% - 42px);">
+      <div class="contact" style="border-radius: 12vw; height: calc((100vh - 42px) / 12); margin-bottom: 5vh;">
+        <img src="./Add.png" style="height: calc((100vh - 42px) / 12); width: calc((100vh - 42px) / 12); border-radius: 100%; display:inline;">
+        <div style="display: inline; vertical-align: middle;">
+          <input type="search" placeholder="Add User" id="AddUser" style="font-size: 2vw; background-color: #1f1f1f; color:white; display: inline; border: none; width: calc(90% - ((100vh - 42px) / 12));">
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="Files" style="display: none;">
+    <div id="FileContainer" style="padding-top: calc((100vh - 42px) * 0.15);"></div>
+    <div style="position:fixed; left:calc(300px); top:43px; width: calc((100% - 300px)); height: calc((100vh - 42px) * 0.15); background-color: #0f0f0f;">
+      <div id="SelectedFileName" style="font-size: 3vw; padding-left: 2%; word-wrap: none;">No Files Selected</div>
+      <div style="padding-left: 2%; word-wrap: none;">
+        <input type="button" value="<<" onclick="goUpDir()"><input type="button" value="Upload" onclick="uploadSelectedDir()">
+      </div>
+    </div>
+  </div>
+  <div id="Contacts" style="display: none;">
+    <h1>Contacts</h1>
+  </div>
+  <div id="Settings" style="display: none;">
+    <h1>Settings</h1>
+  </div>
+  <div style="display: none;">
+    <div id="User" class="contact" style="user-select: none; cursor: pointer; border-radius: 12vw; height: calc((100vh - 42px) / 12);">
+      <img src="./Null.png" style="height: calc((100vh - 42px) / 12); width: calc((100vh - 42px) / 12); border-radius: 100%; display:inline; float:left;">
+      <div style="display: inline; vertical-align: top;">
+        <div style="height: calc(70%); font-size: 1.5vw;"></div>
+        <div style="font-size: 0.5vw; padding-left: 18%; height: calc(30%);">0x1649c0d7242d819e8957b3a563594317228a6a68a420d3c5b30f9ff0b61a126c3</div>
+      </div>
+    </div>
+    <div id="Message" class="msg" style="border-radius: 2vw; text-align: left; padding: 2vw; margin: 0.5vw;"></div>
+    <div id="TmpFile"style="width: 10vw; margin: 0.5vw; border-radius: 1vw; display: inline-block; cursor: pointer; background-color: #1f1f1f;">
+      <img src="./File.png" style="width: 10vw;">
+      <div style="text-align:center; width: 10vw;">Blah.txt</div>
+    </div>
+    <div id="TmpFolder" style="width: 10vw; margin: 0.5vw; border-radius: 1vw; display: inline-block; cursor: pointer; background-color: #1f1f1f;">
+      <img src="./Folder.png" style="width: 10vw;">
+      <div style="text-align:center; width: 10vw;">Blah</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  var Folder = document.getElementById("TmpFolder");
+  var File = document.getElementById("TmpFile");
+  var Overview = document.getElementById("Overview");
+  var Chat = document.getElementById("Chat");
+  var Files = document.getElementById("Files");
+  var Contacts = document.getElementById("Contacts");
+  var Settings = document.getElementById("Settings");
+  var Menus = [Overview,Chat,Files,Contacts,Settings];
+  var CurrentMenu = 0;
+  function updateView(id) {
+    if (!id) {
+      id = parseInt(window.location.hash.slice(1)) || 0;
+    }
+    CurrentMenu = id;
+    Menus.forEach(function(ele){
+      ele.style.display = "none";
+    });
+    Menus[id].style.display = "";
+  }
+  var MsgBox = document.getElementById("MsgBox");
+  var AddUserBox = document.getElementById("AddUser");
+  window.onkeydown = function(e) {
+    if (e.key == "Enter" && !e.shiftKey) {
+      if (document.activeElement == MsgBox) {
+        if (MsgBox.value) {
+          sendMessage(MsgBox.value,SelectedUser);
+        }
+        setTimeout(function(){
+          MsgBox.value = "";
+        },0);
+      } else if (document.activeElement == AddUserBox) {
+        addUser(AddUserBox.value);
+        AddUserBox.value = "";
+      }
+    }
+  }
+  var UserDisplay = document.getElementById("User");
+  var ChatContacts = document.getElementById("ChatContacts");
+  var SelectedUser = null;
+  var SelectedUserElement = document.getElementById("SelectedUserName");
+  function displayUsers(Users) {
+    var len = Math.max(Users.length,ChatContacts.children.length-1);
+    for (var i=0; i<len && i>=0; i++) {
+      if (Users[i]) {
+        if (ChatContacts.children[i+1]) {
+          var ele = ChatContacts.children[i+1];
+          ele.children[0].src;
+          ele.children[1].children[0].innerText = Users[i].Username;
+          ele.children[1].children[1].innerText = Users[i].Adress;
+        } else {
+          var ele = UserDisplay.cloneNode(true);
+          ele.children[0].src;
+          ele.children[1].children[0].innerText = Users[i].Username;
+          ele.children[1].children[1].innerText = Users[i].Adress;
+          ele.onmousedown = function() {
+            var addr = this.children[1].children[1].innerText;
+            // console.log(Messages[addr]);
+            SelectedUser = addr;
+            SelectedUserElement.innerText = SelectedUser.slice(0,20)+"...";
+            displayMessages(addr);
+          }
+          ChatContacts.appendChild(ele);
+        }
+      } else {
+        if (ChatContacts.children[i+1]) {
+          ChatContacts.children[i+1].remove();
+        }
+        i--;
+        len--;
+      }
+    }
+  }
+  var Messages = {};
+  var MessagedUsers = [];
+  function updateMessages() {
+    var oReq = new XMLHttpRequest();
+    oReq.addEventListener("load", function(){
+      var parsed = oReq.responseText.split("\n").slice(0,-1).map(JSON.parse);
+      for (var i=0; i<parsed.length; i++) {
+        if (parsed[i].Standard == "KC-129") {
+          if (Messages[parsed[i].From]) {
+            Messages[parsed[i].From].push(parsed[i].DecryptedMessage);
+          } else {
+            Messages[parsed[i].From] = [parsed[i].DecryptedMessage];
+            updateUsers();
+          }
+          if (!MessagedUsers.includes(parsed[i].From)) {
+            MessagedUsers.push(parsed[i].From);
+          }
+        }
+      }
+      if (parsed.length > 0) {
+        displayMessages(SelectedUser);
+      }
+    });
+    oReq.open("GET", "/api/update");
+    oReq.send();
+  }
+  updateMessages();
+  function updateUsers() {
+    var oReq = new XMLHttpRequest();
+    oReq.addEventListener("load", function(){
+      var parsed = oReq.responseText.split("\n").slice(0,-1).map(JSON.parse);
+      displayUsers(parsed[0].map(function(adr){
+        return {Username:adr.slice(0,20)+"...",Adress:adr};
+      }));
+    });
+    oReq.open("GET", "/api/getUsers");
+    oReq.send();
+  }
+  updateUsers();
+  setInterval(updateMessages,1000);
+  var MessageDemo = document.getElementById("Message");
+  var MessageArea = document.getElementById("Chats");
+  function displayMessages(addr) {
+    if (!Messages[addr]) {
+      MessageArea.replaceChildren();
+      return;
+    }
+    var len = Math.max(Messages[addr].length,MessageArea.children.length);
+    for (var i=0; i<len; i++) {
+      if (Messages[addr][i]) {
+        if (MessageArea.children[i]) {
+          var ele = MessageArea.children[i];
+          ele.innerText = Messages[addr][i];
+        } else {
+          var ele = MessageDemo.cloneNode(true);
+          ele.innerText = Messages[addr][i];
+          MessageArea.appendChild(ele);
+          MessageArea.parentNode.scrollTop = MessageArea.parentNode.scrollHeight;
+        }
+      } else {
+        if (MessageArea.children[i]) {
+          MessageArea.children[i].remove();
+        }
+        i--;
+        len--;
+      }
+    }
+  }
+  function addUser(adrs) {
+    var oReq = new XMLHttpRequest();
+    oReq.open("GET", "/api/addUser/"+adrs);
+    oReq.addEventListener("load", function(){
+      updateUsers();
+    });
+    oReq.send();
+  }
+  function sendMessage(msg,addr) {
+    var oReq = new XMLHttpRequest();
+    oReq.open("POST", "/api/sendMessage/"+addr);
+    oReq.send(msg);
+    if (Messages[addr]) {
+      Messages[addr].push(msg);
+    } else {
+      Messages[addr] = [msg];
+    }
+    // Messages[addr].push("Encrypted Message sent, original message is only readable by the recipant");
+    displayMessages(addr);
+  }
+  var CurrentDir = null;
+  var DirView = [];
+  function getHomeDir() {
+    var oReq = new XMLHttpRequest();
+    oReq.open("GET", "/api/files");
+    oReq.addEventListener("load", function(){
+      CurrentDir = oReq.responseText;
+      getDir();
+    });
+    oReq.send();
+  }
+  function getDir() {
+    var oReq = new XMLHttpRequest();
+    oReq.open("GET", "/api/files/"+CurrentDir);
+    oReq.addEventListener("load", function(){
+      var parsed = oReq.responseText.split("\n").slice(0,-1).map(JSON.parse);
+      DirView = parsed.sort(function(f){return (f.File*2)-1});
+      displayFiles();
+    });
+    oReq.send();
+  }
+  var TmpFile = document.getElementById("TmpFile");
+  var TmpFolder = document.getElementById("TmpFolder");
+  var FileContainer = document.getElementById("FileContainer");
+  var SelectedFileElements = [];
+  var SelectedFileName = document.getElementById("SelectedFileName");
+  function displayFiles() {
+    FileContainer.replaceChildren();
+    for (var i=0; i<DirView.length; i++) {
+      if (DirView[i].File) {
+        var ele = TmpFile.cloneNode(true);
+        ele.children[1].innerText = DirView[i].Name;
+      } else {
+        var ele = TmpFolder.cloneNode(true);
+        ele.children[1].innerText = DirView[i].Name;
+        ele.ondblclick = function() {
+          SelectedFileElements = [];
+          CurrentDir = this.FilePath || CurrentDir;
+          getDir();
+        }
+      }
+      ele.FilePath = CurrentDir+"/"+DirView[i].Name;
+      ele.FileName = DirView[i].Name;
+      ele.isFile = DirView[i].File;
+      ele.onclick = function(e) {
+        if (e.shiftKey) {
+          SelectedFileElements.push(this);
+          this.style.backgroundColor = "#008000";
+        } else {
+          for (var i=0; i<SelectedFileElements.length; i++) {
+            SelectedFileElements[i].style.backgroundColor = "#1f1f1f";
+          }
+          SelectedFileElements = [this];
+          SelectedFileName.innerText = this.FileName;
+          this.style.backgroundColor = "#008000";
+        }
+      }
+      FileContainer.appendChild(ele);
+    }
+  }
+  getHomeDir();
+  function goUpDir() {
+    var newdr = CurrentDir.split("/").slice(0,-1).join("/");
+    if (newdr) {
+      CurrentDir = newdr;
+      getDir();
+    }
+  }
+  function uploadSelectedDir() {
+    for (var i=0; i<SelectedFileElements.length; i++) {
+      if (SelectedFileElements[i].isFile) {
+        var oReq = new XMLHttpRequest();
+        oReq.open("GET", "/api/uploadFile/"+SelectedFileElements[i].FilePath);
+        oReq.addEventListener("load", function(){
+          oReq.responseText;
+        });
+        oReq.send();
+      }
+    }
+  }
+  updateView();
+</script>
+
+<script>
+// Get the Sidebar
+var mySidebar = document.getElementById("mySidebar");
+
+// Get the DIV with overlay effect
+var overlayBg = document.getElementById("myOverlay");
+
+// Toggle between showing and hiding the sidebar, and add overlay effect
+function w3_open() {
+  if (mySidebar.style.display === 'block') {
+    mySidebar.style.display = 'none';
+    overlayBg.style.display = "none";
+  } else {
+    mySidebar.style.display = 'block';
+    overlayBg.style.display = "block";
+  }
+}
+
+// Close the sidebar with the close button
+function w3_close() {
+  mySidebar.style.display = "none";
+  overlayBg.style.display = "none";
+}
+</script>
+
+
+</body></html>
