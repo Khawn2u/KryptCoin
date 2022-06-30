@@ -7,7 +7,6 @@ var dgram = require("dgram");
 var stream = require('stream');
 var crypto = require("crypto");
 var events = require('events');
-var readline = require('readline');
 var Crypt = require("khawn2u-crypt");
 var DC = null;
 try {
@@ -32,6 +31,8 @@ var KryptCoin = function(ops) {
     var OpsTmp = {};
     Object.assign(OpsTmp,ops);
     OpsTmp.Adress = this.Adress;
+    OpsTmp.DataFilePath = OpsTmp.DataFilePath.endsWith("/") ? OpsTmp.DataFilePath : OpsTmp.DataFilePath+"/";
+    this.filePath = OpsTmp.DataFilePath;
     this.CurrentWorker = 0;
     this.WorkerStreamCallbacks = {};
     for (var i=0; i<this.Threads; i++) {
@@ -43,14 +44,14 @@ var KryptCoin = function(ops) {
             // console.log(RandID)
             if (self.WorkerStreamCallbacks[RandID]) {
                 if (data.length > 32) {
-                    self.WorkerStreamCallbacks[RandID].push(data.slice(32));
-                    // if (data.slice(-32).toString('hex') == RandID) {
-                    //     self.WorkerStreamCallbacks[RandID].push(data.slice(32,-32));
-                    //     self.WorkerStreamCallbacks[RandID].destroy();
-                    //     delete self.WorkerStreamCallbacks[RandID];
-                    // } else {
-                    //     self.WorkerStreamCallbacks[RandID].push(data.slice(32));
-                    // }
+                    // self.WorkerStreamCallbacks[RandID].push(data.slice(32));
+                    if (data.slice(-32).toString('hex') == RandID) {
+                        self.WorkerStreamCallbacks[RandID].push(data.slice(32,-32));
+                        self.WorkerStreamCallbacks[RandID].destroy();
+                        delete self.WorkerStreamCallbacks[RandID];
+                    } else {
+                        self.WorkerStreamCallbacks[RandID].push(data.slice(32));
+                    }
                 } else {
                     self.WorkerStreamCallbacks[RandID].destroy();
                     delete self.WorkerStreamCallbacks[RandID];
@@ -222,36 +223,34 @@ var KryptCoin = function(ops) {
         var cipher = crypto.createDecipheriv('aes-256-ecb', Buffer.from(key), null);
         return Buffer.concat([cipher.update(msg),cipher.final()]);
     }
+    this.addAdress = function(addr) {
+        if (!fs.existsSync(self.filePath+addr)) {
+            fs.mkdirSync(self.filePath+addr);
+        }
+    }
     this.encryptedMessage = function(msg) {
         this.EncryptedMessage = null;
-        this.encryptWithAdress = function(adres) {
-            var keys = self.crypt.secp256k1.encryptWithPublicKey(adres);
-            this.EncryptedMessage = {
-                Message:self.AES256Enc(msg,keys.SharedKey),
-                Key:keys.PublicKey,
-                To:adres,
-                Standard: "KC-129"
-            };
+        this.SignedMessage = null;
+        this.sign = function(sk) {
+            var arr = Buffer.from(msg,'utf-8');
+            if (!sk) {
+                sk = PrivateKey;
+            }
+            this.SignedMessage = self.signBuffer(arr,sk);
             return this;
         }
-        this.sign = function(sk) {
-            if (this.EncryptedMessage) {
-                var key = self.crypt.bigIntToBuffer(BigInt(this.EncryptedMessage.Key));
-                var arr = new Uint8Array(34+key.length+this.EncryptedMessage.Message.length);
-                var adrs = self.crypt.bigIntToBuffer(BigInt(this.EncryptedMessage.To));
-                arr.set(adrs,33-adrs.length);
-                arr[33] = key.length;
-                arr.set(key,34);
-                arr.set(this.EncryptedMessage.Message,34+key.length);
-                if (!sk) {
-                    sk = PrivateKey;
-                }
-                this.EncryptedMessage.arrayBuffer = self.signBuffer(arr,sk);
-                var t = new Uint8Array(this.EncryptedMessage.arrayBuffer.length+1);
-                t.set(this.EncryptedMessage.arrayBuffer,1);
-                t[0] = 129;
-                this.EncryptedMessage.arrayBuffer = t;
-                return this.EncryptedMessage.arrayBuffer;
+        this.encryptWithAdress = function(adres) {
+            if (this.SignedMessage) {
+                var keys = self.crypt.secp256k1.encryptWithPublicKey(adres);
+                var enc = self.AES256Enc(this.SignedMessage,keys.SharedKey);
+                var keyBfr = self.crypt.bigIntToBuffer(BigInt(keys.PublicKey));
+                var adrsArr = Buffer.alloc(35);
+                var adrs = self.crypt.bigIntToBuffer(BigInt(adres));
+                adrsArr.set(adrs,34-adrs.length);
+                adrsArr[0] = 129;
+                adrsArr[34] = keyBfr.length;
+                this.EncryptedMessage = Buffer.concat([adrsArr,keyBfr,enc]);
+                return this.EncryptedMessage;
             }
         }
     }
@@ -307,7 +306,6 @@ var KryptCoin = function(ops) {
     }
     this.parse = function(bffr,callback) {
         var Streams = self.newWorkerStream();
-        Streams.Input.end(bffr);
         var body = "";
         Streams.Output.on('data',function(data){
             body += data;
@@ -315,6 +313,7 @@ var KryptCoin = function(ops) {
         Streams.Output.on('close',function(){
             callback(JSON.parse(body));
         });
+        Streams.Input.end(bffr);
     }
     this.socket = dgram.createSocket("udp4");
     this.socket.MTU = 65507;
@@ -365,21 +364,29 @@ var KryptCoin = function(ops) {
                         }
                     });
                 },
-                Timeout:setTimeout(function(){
-                    if (!self.Peers[PeerID].Identified) {
+                Timeout:setInterval(function(){
+                    if ((new Date())-self.Peers[PeerID].TimeLastSeen >= 10000 && !self.Peers[PeerID].Identified) {
+                        clearInterval(self.Peers[PeerID].Timeout);
+                        self.emit('peer-fail',self.Peers[PeerID]);
                         delete self.Peers[PeerID];
+                        return;
                     }
-                },10000)
+                    if (self.Peers[PeerID].Identified) {
+                        clearInterval(self.Peers[PeerID].Timeout);
+                    } else {
+                        self.Peers[PeerID].send(Buffer.concat([Buffer.alloc(1),self.Peers[PeerID].ValidationValue]));
+                    }
+                },1000)
             };
             var b = Buffer.concat([Buffer.alloc(1),self.Peers[PeerID].ValidationValue]);
             self.Peers[PeerID].send(b);
         } else {
-            // if (data.length <= 0) {
-            //     return;
-            // }
+            if (data.length <= 0) {
+                return;
+            }
             // console.log(self.Peers[PeerID]);
             if (!self.Peers[PeerID].Identified && (data[0] !== 0 && data[0] !== 1)) {
-                self.Peers[PeerID].ValidationValue = crypto.randomBytes(32);
+                // self.Peers[PeerID].ValidationValue = crypto.randomBytes(32);
                 self.Peers[PeerID].send(Buffer.concat([Buffer.alloc(1),self.Peers[PeerID].ValidationValue]));
                 return;
             }
@@ -395,25 +402,29 @@ var KryptCoin = function(ops) {
                 if (self.bufferEqual(signiture.Message,self.Peers[PeerID].ValidationValue)) {
                     self.Peers[PeerID].Adress = self.crypt.secp256k1.toAdress(self.crypt.secp256k1.recoverPublicKey(signiture));
                     var tf = !self.Peers[PeerID].Identified;
+                    self.addAdress(self.Peers[PeerID].Adress);
                     self.Peers[PeerID].Identified = true;
                     if (tf) {
                         self.emit('peer',self.Peers[PeerID]);
                     }
-                } else {
+                }/* else {
+                    clearInterval(self.Peers[PeerID].Timeout);
                     delete self.Peers[PeerID];
-                }
+                }*/
             } else if (data[0] == 128) {
                 self.parse(data,function(Txn){
                     self.emit('txn',Txn);
                 });
             } else if (data[0] == 129) {
+                // console.log("Message");
                 self.parse(data,function(msg){
-                    if (msg.Dec) {
-                        self.emit('message',msg);
+                    if (msg.DecryptedMessage) {
                         self.emit('message-receved',msg);
-                    } else {
-                        self.emit('message',msg);
+                        if (self.WebGUIServer) {
+                            self.WebQue.push(msg);
+                        }
                     }
+                    self.emit('message',msg);
                 });
             } else if (data[0] == 131) {
                 self.parse(data,function(con){
@@ -443,14 +454,189 @@ var KryptCoin = function(ops) {
             }
         });
     }
+    process.on('exit',function(){
+        self.stopPeerService();
+    })
     this.startTerminalInterface = function() {
-        var rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-            completer:function(line) {
-                return ['1','2'];
+        var UP = Buffer.from("1b5b41",'hex');
+        var DOWN = Buffer.from("1b5b42",'hex');
+        var LEFT = Buffer.from("1b5b44",'hex');
+        var RIGHT = Buffer.from("1b5b43",'hex');
+        var ENTER = Buffer.from("0d",'hex');
+        process.stdin.setRawMode(true);
+        var Colors = {
+            Reset:"\x1b[0m",
+            Bright:"\x1b[1m",
+            Dim:"\x1b[2m",
+            Underscore:"\x1b[4m",
+            Blink:"\x1b[5m",
+            Reverse:"\x1b[7m",
+            Hidden:"\x1b[8m",
+            FgBlack:"\x1b[30m",
+            FgRed:"\x1b[31m",
+            FgGreen:"\x1b[32m",
+            FgYellow:"\x1b[33m",
+            FgBlue:"\x1b[34m",
+            FgMagenta:"\x1b[35m",
+            FgCyan:"\x1b[36m",
+            FgWhite:"\x1b[37m",
+            BgBlack:"\x1b[40m",
+            BgRed:"\x1b[41m",
+            BgGreen:"\x1b[42m",
+            BgYellow:"\x1b[43m",
+            BgBlue:"\x1b[44m",
+            BgMagenta:"\x1b[45m",
+            BgCyan:"\x1b[46m",
+            BgWhite:"\x1b[47m"
+        }
+        var State = {
+            SelectionIndex:0,
+            SelectionList:["Test 1","Test 2","Test 3","Test 4"]
+        };
+        function reDraw() {
+            console.clear();
+            console.log("KryptCoin\n\n\n\n\n");
+            for (var i=0; i<State.SelectionList.length; i++) {
+                if (i == State.SelectionIndex) {
+                    console.log(Colors.Underscore+State.SelectionList[i]+Colors.Reset);
+                } else {
+                    console.log(State.SelectionList[i]);
+                }
+            }
+        }
+        process.stdin.on('data',function(key){
+            if (key[0] == 3) {
+                process.exit();
+                return;
+            }
+            if (self.bufferEqual(UP,key)) {
+                // console.log("UP");
+                // State.SelectionIndex = (State.SelectionIndex+State.SelectionList.length-1)%State.SelectionList.length;
+            } else if (self.bufferEqual(DOWN,key)) {
+                // console.log("DOWN");
+                // State.SelectionIndex = (State.SelectionIndex+1)%State.SelectionList.length;
+            } else if (self.bufferEqual(LEFT,key)) {
+                // console.log("LEFT");
+                State.SelectionIndex = Math.max(State.SelectionIndex-1,0);
+                reDraw();
+            } else if (self.bufferEqual(RIGHT,key)) {
+                // console.log("RIGHT");
+                State.SelectionIndex = Math.min(State.SelectionIndex+1,State.SelectionList.length-1);
+                reDraw();
+            } else if (self.bufferEqual(ENTER,key)) {
+                // console.log("ENTER");
+            } else {
+                // console.log(key);
             }
         });
+        console.clear();
+        console.log("KryptCoin Terminal");
+    }
+    this.WebGUIServer = null;
+    this.WebQue = [];
+    this.startWebGUI = function(port) {
+        if (self.WebGUIServer) {
+            throw new Error("Server already started!");
+        } else {
+            self.WebGUIServer = http.createServer(function(req,res){
+                if (req.url.startsWith("/api/")) {
+                    if (req.url.startsWith("/api/getMessages")) {
+                        res.writeHead(200);
+                        res.end();
+                    } else if (req.url.startsWith("/api/sendMessage/0x")) {
+                        var message = "";
+                        req.on('data',function(data){
+                            message += data;
+                        });
+                        req.on('end',function(){
+                            var Message = new self.encryptedMessage(message);
+                            var msg = Message.sign().encryptWithAdress(req.url.slice(17));
+                            self.broadcast(msg);
+                            res.writeHead(200);
+                            res.end();
+                        });
+                    } else if (req.url.startsWith("/api/update")) {
+                        for (var i=0; i<self.WebQue.length; i++) {
+                            res.write(JSON.stringify(self.WebQue[i])+"\n");
+                        }
+                        self.WebQue = [];
+                        res.end();
+                    } else if (req.url.startsWith("/api/getUsers")) {
+                        fs.readdir(self.filePath,function(err,stuff){
+                            stuff = stuff.filter(function(val){return val.startsWith("0x") && val !== self.Adress});
+                            res.end(JSON.stringify(stuff)+"\n");
+                        });
+                    } else if (req.url.startsWith("/api/addUser/0x")) {
+                        self.addAdress(req.url.slice(13));
+                        res.writeHead(200);
+                        res.end();
+                    } else if (req.url.startsWith("/api/files")) {
+                        if (req.url.length <= 11) {
+                            res.writeHead(200);
+                            res.end(os.homedir());
+                        } else {
+                            var path = decodeURI(req.url.slice(11));
+                            if (fs.existsSync(path)) {
+                                path = path.endsWith("/") ? path : path+"/";
+                                fs.readdir(path,function(err,paths){
+                                    var result = "";
+                                    for (var i=0; i<paths.length; i++) {
+                                        // paths[i] = {Name:paths[i],File:fs.statSync(FilePath).isFile()};
+                                        result += JSON.stringify({Name:paths[i],File:fs.statSync(path+paths[i]).isFile()})+"\n";
+                                    }
+                                    res.writeHead(200);
+                                    res.end(result);
+                                });
+                            } else {
+                                res.writeHead(404);
+                                res.end();
+                            }
+                        }
+                    } else if (req.url.startsWith("/api/uploadFile/")) {
+                        var path = decodeURI(req.url.slice(16));
+                        if (fs.existsSync(path)) {
+                            var keys = self.crypt.secp256k1.encryptWithPublicKey(self.Adress);
+                            var key = self.crypt.bigIntToBuffer(BigInt(keys.PublicKey));
+                            var header = Buffer.alloc(key.length+1);
+                            header[0] = key.length;
+                            header.set(key,1);
+                            // var Stream = fs.createReadStream(path);
+                            // self.broadcastStream(self.Adress,self.AES256EncStream(Stream,keys.SharedKey),header);
+                            res.writeHead(200);
+                            res.end();
+                        } else {
+                            res.writeHead(404);
+                            res.end();
+                        }
+                    } else {
+                        res.writeHead(404);
+                        res.end();
+                    }
+                } else {
+                    var path = __dirname+"/WebGUI"+req.url;
+                    if (req.url == "/") {
+                        path = __dirname+"/WebGUI/index.html";
+                    }
+                    if (fs.existsSync(path)) {
+                        res.writeHead(200);
+                        var stream = fs.createReadStream(path);
+                        stream.pipe(res);
+                    } else {
+                        res.writeHead(404);
+                        res.end();
+                    }
+                }
+            });
+            self.WebGUIServer.listen(port || 8080,'127.0.0.1');
+        }
+    }
+    this.stopWebGUI = function() {
+        if (self.WebGUIServer) {
+            self.WebGUIServer.close();
+            self.WebGUIServer = undefined;
+        } else {
+            throw new Error("Server already closed!");
+        }
     }
 }
 util.inherits(KryptCoin, events.EventEmitter);

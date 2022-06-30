@@ -81,16 +81,12 @@ var parseSignedTx = function(buff) {
     return Tx;
 }
 var parseEncryptedMessage = function(msgbfr) {
-    var signiture = crypt.BufferToSignedMessage(msgbfr);
-    var from = crypt.secp256k1.toAdress(crypt.secp256k1.recoverPublicKey(signiture));
-    var bfr = signiture.Message;
-    var len = bfr[33]+34;
+    var len = msgbfr[33]+34;
     return {
         arrayBuffer:msgbfr,
-        Message: bfr.slice(len),
-        Key: "0x"+crypt.bufferToBigInt(bfr.slice(34,len)).toString(16),
-        To: "0x"+crypt.bufferToBigInt(bfr.slice(0,33)).toString(16),
-        From: from,
+        Message: msgbfr.slice(len),
+        Key: "0x"+crypt.bufferToBigInt(msgbfr.slice(34,len)).toString(16),
+        To: "0x"+crypt.bufferToBigInt(msgbfr.slice(0,33)).toString(16),
         Standard:"KC-129"
     };
 }
@@ -107,7 +103,12 @@ var decryptMessage = function(msg,sk) {
         sk = PrivateKey;
     }
     var key = crypt.secp256k1.decryptWithPrivateKey(msg.Key,sk);
-    return AES256Dec(msg.Message,key);
+    var dec = AES256Dec(msg.Message,key);
+    console.log(dec);
+    var signiture = crypt.BufferToSignedMessage(dec);
+    msg.DecryptedMessage = signiture.Message.toString('utf-8');
+    msg.From = crypt.secp256k1.toAdress(crypt.secp256k1.recoverPublicKey(signiture));
+    return msg;
 }
 var parseAmount = function(a) {
     if (a.constructor === String) {
@@ -161,6 +162,56 @@ var AES256EncStream = function(strm,key) {
     strm.pipe(cipher);
     return cipher;
 }
+var writeStream = function(dataStream,adress) {
+    var Hash = new crypt.Hash.Keccak(256, [1, 256, 65536, 16777216], 256);
+    dataStream.on('data',function(d){
+        Hash.update(d);
+    });
+    var path = filePath+adress;
+    if (!fs.existsSync(path)) {
+        fs.mkdirSync(path);
+    }
+    var tmpID = crypt.toHex(crypt.randomBytes(32));
+    path += "/"+tmpID;
+    var writeStrm = fs.createWriteStream(path);
+    dataStream.pipe(writeStrm);
+    dataStream.on('end',function(d){
+        var digest = Hash.arrayBuffer();
+        fs.appendFile(path+"/#0",digest,function(err){
+            if (err) {
+                console.log(err);
+            }
+        });
+        var newPath = path.replaceAll(tmpID,"#"+crypt.toHex(digest));
+        fs.rename(path,newPath,function(err){
+            if (err) {
+                console.log(err);
+            }
+        });
+    });
+}
+var write = function(data,adress) {
+    var Hash = crypt.Keccak256(data);
+    var ID = crypt.toHex(Hash);
+    var path = filePath+adress;
+    if (!fs.existsSync(path)) {
+        fs.mkdirSync(path);
+    }
+    fs.appendFile(path+"/index",Hash,function(err){
+        if (err) {
+            console.log(err);
+        }
+    });
+    path += "/#"+ID;
+    if (fs.existsSync(path)) {
+        return ID;
+    }
+    fs.writeFile(path,data,function(err){
+        if (err) {
+            console.log(err);
+        }
+    });
+}
 var Options = null;
 var PrivateKey = null;
 var PublicKey = null;
@@ -205,6 +256,8 @@ var StreamHandler = function(InStream,OutStream) {
     InStream.on('close',function(){
         if (type === 128) {
             var Txn = parseSignedTx(body);
+            write(body,Txn.To);
+            write(body,Txn.From);
             delete Txn.arrayBuffer;
             Txn.Fee = amountToString(Txn.Fee.RawTokenAmount);
             Txn.Change = amountToString(Txn.Change.RawTokenAmount);
@@ -212,18 +265,27 @@ var StreamHandler = function(InStream,OutStream) {
             OutStream.end(Buffer.from(JSON.stringify(Txn),'utf-8'));
         } else if (type === 129) {
             var Msg = parseEncryptedMessage(body);
+            // console.log("Message3");
+            // console.log(Msg);
+            write(body,Msg.To);
             delete Msg.arrayBuffer;
             if (Msg.To == Adress) {
                 try {
-                    Msg.DecryptedMessage = decryptMessage(Msg).toString('utf-8');
+                    Msg = decryptMessage(Msg);
+                    delete Msg.Message;
                 } catch(err) {
                     console.log(err);
                 }
             }
-            Msg.Message = Array.from(Msg.Message);
+            if (Msg.Message) {
+                Msg.Message = Array.from(Msg.Message);
+            }
             OutStream.end(Buffer.from(JSON.stringify(Msg),'utf-8'));
         } else if (type === 131) {
             var Contract = parseContract(body);
+            for (var i=0; i<Contract.Terms.length; i++) {
+                write(body,Contract.Terms.Adress);
+            }
             delete Contract.arrayBuffer;
             OutStream.end(Buffer.from(JSON.stringify(Contract),'utf-8'));
         }
