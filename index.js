@@ -1,117 +1,175 @@
+var os = require("os");
 var fs = require("fs");
 var net = require("net");
+var http = require("http");
+var util = require('util');
+var dgram = require("dgram");
+var stream = require('stream');
 var crypto = require("crypto");
-// var Crypt = require("khawn2u-crypt");
-var Crypt = require("/home/pi/Desktop/khawn2u-crypt/index.js");
+var events = require('events');
+var readline = require('readline');
+var Crypt = require("khawn2u-crypt");
+var DC = null;
+try {
+    DC = require('discovery-channel');
+} catch (err) {
+    console.log("Peer discovery package failed to load, although this is okay because that package is really old and I know how crappy old packages are. So I have made this package not required and KryptCoin will continue to function, just without peers, your welcome");
+}
 var child_process = require("child_process");
-var stream = require("stream");
-var os = require("os");
+const { Stream } = require("stream");
 var KryptCoin = function(ops) {
     var self = this;
     this.crypt = new Crypt();
-    /*
-    this.MultiThreaded = ops.MultiThread;
-    if (this.MultiThreaded) {
-        this.Threads = os.cpus().length*(ops.ThreadMultiplier || 1);
-        this.Workers = [];
-        this.OpenWorkers = [];
-        this.WorkerCallbacks = {};
-        for (var i=0; i<this.Threads; i++) {
-            this.OpenWorkers.push(false);
-            this.Workers.push(child_process.fork(__dirname+"/worker.js"));
-            var id = i;
-            this.Workers[i].on('message',function(msg){
-                console.log(msg);
-                self.OpenWorkers[id] = true;
-                if (msg !== "Started") {
-                    if (self.WorkerCallbacks[msg.ID] instanceof Function) {
-                        self.WorkerCallbacks[msg.ID](msg.Result);
-                        delete self.WorkerCallbacks[msg.ID];
-                    }
-                }
-            });
-            this.Workers[i].send({Options:ops});
-        }
-    }
-    */
-    var PrivateKey = undefined;
+    this.Threads = os.cpus().length*(ops.ThreadMultiplier || 1);
+    this.Workers = [];
+    this.WorkerCallbacks = {};
+    var PrivateKey = null;
     if (ops.PrivateKey) {
         PrivateKey = BigInt(ops.PrivateKey);
-        this.PublicKey = this.crypt.secp256k1.getPublicKey(PrivateKey);
-        this.Adress = this.crypt.secp256k1.toAdress(this.PublicKey);
+        this.PublicKey = self.crypt.secp256k1.getPublicKey(PrivateKey);
+        this.Adress = self.crypt.secp256k1.toAdress(this.PublicKey);
     }
-    this.parseContract = function(U8array) {
-        var Drafter = "0x"+self.crypt.bufferToBigInt(U8array.subarray(0,33)).toString(16);
-        var Parties = [];
-        for (var i=0; i<U8array[33]; i++) {
-            Parties.push("0x"+self.crypt.bufferToBigInt(U8array.subarray(34+(i*33),67+(i*33))).toString(16));
-        }
-        var idx = 34+(U8array[33]*33);
-        var date = new Date(Number(self.crypt.bufferToBigInt(U8array.subarray(idx,idx+16))));
-        return {
-            Drafter:Drafter,
-            Parties:Parties,
-            Date:date
-        }
-    }
-    this.contract = function(FulfillmentDate,PartiesAdressList) {
-        this.FulfillmentDate = FulfillmentDate;
-        this.Fulfilled = false;
-        this.isTransaction = false;
-        this.Drafter = "0x0";
-        this.Parties = PartiesAdressList;
-        this.SignedContract = undefined;
-        this.UnsignedContract = new Uint8Array(50+(this.Parties.length*33));
-        this.UnsignedContract[33] = this.Parties.length;
-        for (var i=0; i<this.Parties.length; i++) {
-            var adTo = self.crypt.bigIntToBuffer(BigInt(this.Parties[i]));
-            this.UnsignedContract.set(adTo,(67+(i*33))-adTo.length);
-        }
-        var arr = self.crypt.bigIntToBuffer(BigInt(this.FulfillmentDate.valueOf()));
-        this.UnsignedContract.set(arr,this.UnsignedContract.length-arr.length);
-        this.sign = function(sk) {
-            if (sk) {
-                this.Drafter = self.crypt.secp256k1.toAdress(self.crypt.secp256k1.getPublicKey(sk));
-                var adFrom = self.crypt.bigIntToBuffer(BigInt(this.Drafter));
-                this.UnsignedContract.set(adFrom,33-adFrom.length);
-                this.SignedContract = self.crypt.SignedMessageToBuffer(self.crypt.secp256k1.sign(this.UnsignedContract,sk));
-                return this.SignedContract;
-            } else {
-                if (PrivateKey) {
-                    this.Drafter = self.Adress;
-                    var adFrom = self.crypt.bigIntToBuffer(BigInt(this.Drafter));
-                    this.UnsignedContract.set(adFrom,33-adFrom.length);
-                    this.SignedContract = self.crypt.SignedMessageToBuffer(self.crypt.secp256k1.sign(this.UnsignedContract,PrivateKey));
-                    return this.SignedContract;
+    var OpsTmp = {};
+    Object.assign(OpsTmp,ops);
+    OpsTmp.Adress = this.Adress;
+    this.CurrentWorker = 0;
+    this.WorkerStreamCallbacks = {};
+    for (var i=0; i<this.Threads; i++) {
+        this.Workers.push(child_process.spawn("node",[__dirname+"/worker.js"],{stdio:[process.stdin, process.stdout, process.stderr, 'pipe']}));
+        this.Workers[i].ioStream = this.Workers[i].stdio[3];
+        this.Workers[i].ioStream.write(Buffer.from(JSON.stringify(OpsTmp),'utf-8'));
+        this.Workers[i].ioStream.on('data',function(data){
+            var RandID = data.subarray(0,32).toString('hex');
+            // console.log(RandID)
+            if (self.WorkerStreamCallbacks[RandID]) {
+                if (data.length > 32) {
+                    self.WorkerStreamCallbacks[RandID].push(data.slice(32));
+                    // if (data.slice(-32).toString('hex') == RandID) {
+                    //     self.WorkerStreamCallbacks[RandID].push(data.slice(32,-32));
+                    //     self.WorkerStreamCallbacks[RandID].destroy();
+                    //     delete self.WorkerStreamCallbacks[RandID];
+                    // } else {
+                    //     self.WorkerStreamCallbacks[RandID].push(data.slice(32));
+                    // }
                 } else {
-                    throw new Error("No private key supplied, try adding a PrivateKey value in the config for new KryptCoin(config)");
+                    self.WorkerStreamCallbacks[RandID].destroy();
+                    delete self.WorkerStreamCallbacks[RandID];
                 }
             }
-        }
+        })
     }
-    this.filePath = ops.DataFilePath.endsWith("/") ? ops.DataFilePath : ops.DataFilePath+"/";
-    this.UserTransactionTrees = {};
-    fs.readdir(this.filePath,function(error,files){
-        for (var i=0; i<files.length; i++) {
-            var fileName = files[i];
-            if (fileName.startsWith("0x")) {
-                var TreeFilePath = self.filePath+fileName;
-                self.parseAgreementChainStream(fs.createReadStream(TreeFilePath),function(tre){
-                    self.UserTransactionTrees[fileName] = tre;
-                    console.log(tre);
-                });
-            } else if (fileName == "AgreementChain") {
-
+    this.streamToWorker = function(InStream) {
+        var Worker = self.Workers[self.CurrentWorker];
+        self.CurrentWorker++;
+        if (self.CurrentWorker >= self.Workers.length) {
+            self.CurrentWorker = 0;
+        }
+        var RandIDBuff = crypto.randomBytes(32);
+        var RandID = RandIDBuff.toString('hex');
+        InStream.on('data',function(chunk) {
+            Worker.ioStream.write(Buffer.concat([RandIDBuff,chunk]));
+        });
+        InStream.on('end',function() {
+            Worker.ioStream.write(RandIDBuff);
+        });
+        var OutStream = new stream.Readable({read() {}});
+        self.WorkerStreamCallbacks[RandID] = OutStream;
+        return OutStream;
+    }
+    this.newWorkerStream = function() {
+        var Worker = self.Workers[self.CurrentWorker];
+        self.CurrentWorker++;
+        if (self.CurrentWorker >= self.Workers.length) {
+            self.CurrentWorker = 0;
+        }
+        var RandIDBuff = crypto.randomBytes(32);
+        var RandID = RandIDBuff.toString('hex');
+        var InStream = new stream.Writable({
+            write: function(chunk, encoding, next) {
+                Worker.ioStream.write(Buffer.concat([RandIDBuff,chunk]));
+                next();
+            },
+            final: function() {
+                Worker.ioStream.write(RandIDBuff);
+            }
+        });
+        var OutStream = new stream.Readable({read() {}});
+        self.WorkerStreamCallbacks[RandID] = OutStream;
+        return {
+            Output: OutStream,
+            Input: InStream
+        };
+    }
+    this.signBuffer = function(msg,sk) {
+        if (sk) {
+            return self.crypt.SignedMessageToBuffer(self.crypt.secp256k1.sign(msg,sk));
+        } else {
+            if (PrivateKey) {
+                return self.crypt.SignedMessageToBuffer(self.crypt.secp256k1.sign(msg,PrivateKey));
+            } else {
+                throw new Error("No private key supplied, try adding a PrivateKey value in the config for new KryptCoin(config)");
             }
         }
-    });
+    }
+    this.signContractBuffer = function(msg,sk) {
+        if (sk) {
+            var t1 = self.crypt.SignedMessageToBuffer(self.crypt.secp256k1.sign(msg.subarray(1),sk));
+            var t2 = new Uint8Array(t1.length+1);
+            t2.set(t1,1);
+            t2[0] = 131;
+            return t2;
+        } else {
+            if (PrivateKey) {
+                var t1 = self.crypt.SignedMessageToBuffer(self.crypt.secp256k1.sign(msg.subarray(1),PrivateKey));
+                var t2 = new Uint8Array(t1.length+1);
+                t2.set(t1,1);
+                t2[0] = 131;
+                return t2;
+            } else {
+                throw new Error("No private key supplied, try adding a PrivateKey value in the config for new KryptCoin(config)");
+            }
+        }
+    }
+    this.parseAmount = function(a) {
+        if (a.constructor === String) {
+            var idx = a.indexOf(".");
+            if (idx == -1) {
+                return BigInt(a)*1000000000000000000n;
+            } else {
+                var result = BigInt(a.split(".").join(""));
+                idx = a.length-idx-1;
+                if (idx > 18) {
+                    return result/(10n**BigInt(idx-18));
+                } else {
+                    return result*(10n**BigInt(18-idx));
+                }
+            }
+        } else if (a.constructor === BigInt) {
+            return a;
+        } else if (a.constructor === Number) {
+            return BigInt(a*1000000000000000000);
+        }
+    }
+    this.parseStorageSize = function(stsize) {
+        if (stsize.endsWith("KB")) {
+            return parseFloat(stsize)*1024;
+        } else if (stsize.endsWith("MB")) {
+            return parseFloat(stsize)*1048576;
+        } else if (stsize.endsWith("GB")) {
+            return parseFloat(stsize)*1073741824;
+        } else if (stsize.endsWith("TB")) {
+            return parseFloat(stsize)*1099511627776;
+        } else {
+            return parseInt(stsize);
+        }
+    }
     this.Tx = function(sendAdress,Nonce,Amount,Fee,Change) {
 		this.To = sendAdress;
 		this.From = null;
 		this.Amount = Amount;
 		this.Fee = Fee;
 		this.Change = Change;
-		this.Nonce = Nonce;
+		this.Nonce = BigInt(Nonce);
 		var ad = self.crypt.bigIntToBuffer(BigInt(this.To));
 		var am = self.crypt.bigIntToBuffer(BigInt(this.Amount));
 		var fe = self.crypt.bigIntToBuffer(BigInt(this.Fee));
@@ -134,75 +192,26 @@ var KryptCoin = function(ops) {
             if (sk) {
                 this.Signiture = self.crypt.secp256k1.sign(this.UnsignedTx,sk);
                 this.SignedTx = self.crypt.SignedMessageToBuffer(this.Signiture);
+                var t = new Uint8Array(this.SignedTx.length+1);
+                t[0] = 128;
+                t.set(this.SignedTx,1);
+                this.SignedTx = t;
                 this.From = self.crypt.secp256k1.toAdress(self.crypt.secp256k1.getPublicKey(sk));
                 return this.SignedTx;
             } else {
                 if (PrivateKey) {
                     this.Signiture = self.crypt.secp256k1.sign(this.UnsignedTx,PrivateKey);
                     this.SignedTx = self.crypt.SignedMessageToBuffer(this.Signiture);
+                    var t = new Uint8Array(this.SignedTx.length+1);
+                    t[0] = 128;
+                    t.set(this.SignedTx,1);
+                    this.SignedTx = t;
                     this.From = self.crypt.secp256k1.toAdress(self.crypt.secp256k1.getPublicKey(PrivateKey));
                     return this.SignedTx;
                 } else {
                     throw new Error("No private key supplied, try adding a PrivateKey value in the config for new KryptCoin(config)");
                 }
             }
-		}
-	}
-	this.parseTx = function(buff) {
-		var To = "0x"+self.crypt.bufferToBigInt(buff.subarray(0,33)).toString(16);
-		var idx = 34;
-		var len = buff[33];
-		var Id = self.crypt.bufferToBigInt(buff.subarray(idx,idx+len));
-		idx += len+1;
-		len = buff[idx-1];
-		var Am = self.crypt.bufferToBigInt(buff.subarray(idx,idx+len));
-		idx += len+1;
-		len = buff[idx-1];
-		var Fe = self.crypt.bufferToBigInt(buff.subarray(idx,idx+len));
-		idx += len+1;
-		len = buff[idx-1];
-		var Ch = self.crypt.bufferToBigInt(buff.subarray(idx,idx+len));
-		return {
-			To:To,
-			Fee:{RawTokenAmount:Fe,Value:Number(Fe)/1000000000000000000},
-			Amount:{RawTokenAmount:Am,Value:Number(Am)/1000000000000000000},
-			Change:{RawTokenAmount:Ch,Value:Number(Ch)/1000000000000000000},
-			Nonce:Id
-		}
-	}
-	this.parseSignedTx = function(buff) {
-        var SignedTx = self.crypt.BufferToSignedMessage(buff);
-        var Tx = self.parseTx(SignedTx.Message);
-        Tx.From = self.crypt.secp256k1.toAdress(self.crypt.secp256k1.recoverPublicKey(SignedTx));
-        return Tx;
-	}
-    this.parseAmount = function(a) {
-		if (a.constructor === String) {
-			var idx = a.indexOf(".");
-			if (idx == -1) {
-				return BigInt(a)*1000000000000000000n;
-			} else {
-				var result = BigInt(a.split(".").join(""));
-				idx = a.length-idx-1;
-				if (idx > 18) {
-					return result/(10n**BigInt(idx-18));
-				} else {
-					return result*(10n**BigInt(18-idx));
-				}
-			}
-		} else if (a.constructor === BigInt) {
-			return a;
-		} else if (a.constructor === Number) {
-			return BigInt(a*1000000000000000000);
-		}
-	}
-	this.Zeros = "0".repeat(256);
-	this.amountToString = function(am) {
-		if (am >= 0) {
-			return (am/1000000000000000000n).toString()+"."+(self.Zeros+(am%1000000000000000000n).toString()).slice(-18);
-		} else {
-			am = -am;
-			return "-"+(am/1000000000000000000n).toString()+"."+(self.Zeros+(am%1000000000000000000n).toString()).slice(-18);
 		}
 	}
     this.AES256Enc = function(msg,key) {
@@ -215,15 +224,17 @@ var KryptCoin = function(ops) {
     }
     this.encryptedMessage = function(msg) {
         this.EncryptedMessage = null;
-        this.adressEncrypt = function(adres) {
+        this.encryptWithAdress = function(adres) {
             var keys = self.crypt.secp256k1.encryptWithPublicKey(adres);
             this.EncryptedMessage = {
                 Message:self.AES256Enc(msg,keys.SharedKey),
                 Key:keys.PublicKey,
-                To:adres
+                To:adres,
+                Standard: "KC-129"
             };
+            return this;
         }
-        this.arrayBuffer = function() {
+        this.sign = function(sk) {
             if (this.EncryptedMessage) {
                 var key = self.crypt.bigIntToBuffer(BigInt(this.EncryptedMessage.Key));
                 var arr = new Uint8Array(34+key.length+this.EncryptedMessage.Message.length);
@@ -232,403 +243,217 @@ var KryptCoin = function(ops) {
                 arr[33] = key.length;
                 arr.set(key,34);
                 arr.set(this.EncryptedMessage.Message,34+key.length);
-                return arr;
+                if (!sk) {
+                    sk = PrivateKey;
+                }
+                this.EncryptedMessage.arrayBuffer = self.signBuffer(arr,sk);
+                var t = new Uint8Array(this.EncryptedMessage.arrayBuffer.length+1);
+                t.set(this.EncryptedMessage.arrayBuffer,1);
+                t[0] = 129;
+                this.EncryptedMessage.arrayBuffer = t;
+                return this.EncryptedMessage.arrayBuffer;
             }
         }
     }
-    this.parseEncryptedMessage = function(bfr) {
-        var len = bfr[33]+34;
-        return {
-            Message: bfr.slice(len),
-            Key: "0x"+self.crypt.bufferToBigInt(bfr.slice(34,len)).toString(16),
-            To: "0x"+self.crypt.bufferToBigInt(bfr.slice(0,33)).toString(16)
-        };
-    }
-    this.decryptMessage = function(msg,sk) {
-        if (!sk) {
-            sk = PrivateKey;
-        }
-        var key = self.crypt.secp256k1.decryptWithPrivateKey(msg.Key,sk);
-        return self.AES256Dec(msg.Message,key);
-    }
-    this.getFolderSizeSync = function(path) {
-        var size = 0;
-        path = path.endsWith("/") ? path : path+"/";
-        var files = fs.readdirSync(path);
-        for (var i=0; i<files.length; i++) {
-            var fileName = files[i];
-            var FilePath = path+fileName;
-            var stats = fs.statSync(FilePath);
-            if (stats.isDirectory()) {
-                size += self.getFolderSizeSync(FilePath);
+    this.Contract = function(FulfillmentDate,Terms) {
+        this.FulfillmentDate = FulfillmentDate;
+        this.Fulfilled = false;
+        this.Terms = Terms;
+        this.SignedContract = undefined;
+        var arr = self.crypt.bigIntToBuffer(BigInt(this.FulfillmentDate.valueOf()));
+        this.UnsignedContract = [0,arr.length,Array.from(arr)];
+        for (var i=0; i<this.Terms.length; i++) {
+            var adBfr = new Uint8Array(33);
+            var adTo = self.crypt.bigIntToBuffer(BigInt(this.Terms[i].Adress));
+            adBfr.set(adTo,33-adTo.length);
+            this.UnsignedContract.push(Array.from(adBfr));
+            if (this.Terms[i].Payment < 0) {
+                var Amount = ((-this.Terms[i].Payment)<<1n)|1n;
+                var am = self.crypt.bigIntToBuffer(Amount);
+                this.UnsignedContract.push(am.length);
+                this.UnsignedContract.push(Array.from(am));
             } else {
-                size += stats.size;
+                var Amount = this.Terms[i].Payment<<1n;
+                var am = self.crypt.bigIntToBuffer(Amount);
+                this.UnsignedContract.push(am.length);
+                this.UnsignedContract.push(Array.from(am));
             }
+            var st = self.crypt.bigIntToBuffer(BigInt(this.Terms[i].Storage));
+            this.UnsignedContract.push(st.length);
+            this.UnsignedContract.push(Array.from(st));
         }
-        return {
-            bytes:size,
-            KB:size/1024,
-            MB:size/1048576,
-            GB:size/1073741824,
-            TB:size/1099511627776
-        };
-    }
-    this.parseStorageSize = function(stsize) {
-        if (stsize.endsWith("KB")) {
-            return parseFloat(stsize)*1024;
-        } else if (stsize.endsWith("MB")) {
-            return parseFloat(stsize)*1048576;
-        } else if (stsize.endsWith("GB")) {
-            return parseFloat(stsize)*1073741824;
-        } else if (stsize.endsWith("TB")) {
-            return parseFloat(stsize)*1099511627776;
-        } else {
-            return parseInt(stsize);
-        }
-    }
-    this.MaxDataFolderSize = this.parseStorageSize(ops.MaxDataSize || "16GB");
-    this.parseAgreementChainStream = function(dataStream,callback) {
-        var Tree = [];
-        var currentData = Buffer.alloc(0);
-        var len = 0;
-        var lenlen = 0;
-        var step = 0;
-        dataStream.on('data',function(data){
-            currentData = Buffer.concat([currentData,data]);
-            while (true) {
-                if (step === 0) {
-                    if (currentData.length >= 1) {
-                        lenlen = currentData[0];
-                        currentData = currentData.subarray(1);
-                        step = 1;
-                    } else {
-                        break;
-                    }
-                } else if (step === 1) {
-                    if (currentData.length >= lenlen) {
-                        len = Number(self.crypt.bufferToBigInt(currentData.subarray(0,lenlen)));
-                        currentData = currentData.subarray(lenlen);
-                        step = 2;
-                    } else {
-                        break;
-                    }
-                } else if (step === 2) {
-                    if (currentData.length >= len) {
-                        if (currentData[0] == 128) {
-                            var Txn = self.parseSignedTx(currentData.subarray(1,len));
-                            Tree.push(Txn);
-                        } else if (currentData[0] == 129) {
-                            var Txn = self.parseProofOfAgreement(currentData.subarray(1,len));
-                            Tree.push(Txn);
-                        } else if (currentData[0] == 130) {
-                            var Txn = self.parseEncryptedMessage(currentData.subarray(1,len));
-                            Tree.push(Txn);
-                        } else if (currentData[0] == 131) {
-                            var Txn = self.parseContract(currentData.subarray(1,len));
-                            Tree.push(Txn);
-                        }
-                        currentData = currentData.subarray(len);
-                        step = 0;
-                    } else {
-                        break;
-                    }
+        this.UnsignedContract = new Uint8Array(this.UnsignedContract.flat());
+        this.sign = function(sk) {
+            if (sk) {
+                this.SignedContract = self.crypt.SignedMessageToBuffer(self.crypt.secp256k1.sign(this.UnsignedContract,sk));
+                var t = new Uint8Array(this.SignedContract.length+1);
+                t.set(this.SignedContract,1);
+                t[0] = 131;
+                this.SignedContract = t;
+                return this.SignedContract;
+            } else {
+                if (PrivateKey) {
+                    this.SignedContract = self.crypt.SignedMessageToBuffer(self.crypt.secp256k1.sign(this.UnsignedContract,PrivateKey));
+                    var t = new Uint8Array(this.SignedContract.length+1);
+                    t.set(this.SignedContract,1);
+                    t[0] = 131;
+                    this.SignedContract = t;
+                    return this.SignedContract;
+                } else {
+                    throw new Error("No private key supplied, try adding a PrivateKey value in the config for new KryptCoin(config)");
                 }
             }
-        });
-        dataStream.on('end',function(){
-            callback(Tree);
-        });
-    }
-    this.write = function(data,adress) {
-        var lenarr = [];
-        var len = data.length;
-        while (len) {
-            lenarr.push(len&255);
-            len >>= 8;
-        }
-        lenarr.unshift(lenarr.length);
-        var writeStream = fs.createWriteStream(self.filePath+adress,{flags:'a'});
-        writeStream.end(Buffer.concat([Buffer.from(lenarr),data]));
-    }
-    this.clear = function(data,adress) {
-        var lenarr = [];
-        var len = data.length;
-        while (len) {
-            lenarr.push(len&255);
-            len >>= 8;
-        }
-        lenarr.unshift(lenarr.length);
-        var writeStream = fs.createWriteStream(self.filePath+adress);
-        writeStream.end(Buffer.concat([Buffer.from(lenarr),data]));
-    }
-    this.proofOfAgreement = function(value,adres,callback) {
-        if (!PrivateKey) {
-            throw new Error("No private key supplied, add a PrivateKey value in the config for new KryptCoin(config)");
-        }
-        var path = self.filePath+adres;
-        if (!fs.existsSync(path)) {
-            callback(Buffer.alloc(0));
-            return;
-        }
-        var hash = new self.crypt.Hash.Keccak(384, [1, 256, 65536, 16777216], 384);
-        hash.update(value);
-        var dataStream = fs.createReadStream(path);
-        dataStream.on('data',function(data){
-            hash.update(data);
-        });
-        dataStream.on('end',function(data){
-            var digest = hash.arrayBuffer();
-            var sk = self.crypt.bufferToBigInt(digest);
-            var TimeArr = self.crypt.bigIntToBuffer(BigInt(new Date().valueOf()));
-            var ad = self.crypt.bigIntToBuffer(BigInt(self.Adress));
-            var ad2 = self.crypt.bigIntToBuffer(BigInt(adres));
-            var msg = new Uint8Array(82+value.length);
-            msg.set(ad,33-ad.length);
-            msg.set(ad2,66-ad2.length);
-            msg.set(TimeArr,82-TimeArr.length);
-            msg.set(value,82);
-            var PoA = self.crypt.SignedMessageToBuffer(self.crypt.secp384r1.sign(msg,sk));
-            callback(PoA);
-        });
-    }
-    this.parseProofOfAgreement = function(data) {
-        var s = self.crypt.BufferToSignedMessage(data);
-        var adr = "0x"+self.crypt.bufferToBigInt(s.Message.subarray(0,33)).toString(16);
-        var adr2 = "0x"+self.crypt.bufferToBigInt(s.Message.subarray(33,66)).toString(16);
-        var time = new Date(Number(self.crypt.bufferToBigInt(s.Message.subarray(66,82))));
-        var value = s.Message.subarray(82);
-        return {
-            Message:s.Message,
-            Signiture:s.Signiture,
-            FromAdress:adr,
-            Time:time,
-            ValidationAdress:adr2,
-            Value:value,
-        };
-    }
-    this.verifyProofOfAgreement = function(ParsedPok,callback) {
-        var path = self.filePath+ParsedPok.ValidationAdress;
-        if (!fs.existsSync(path) || ParsedPok.Time > new Date()) {
-            ParsedPok.Valid = false;
-            callback(ParsedPok);
-            return;
-        }
-        var hash = new self.crypt.Hash.Keccak(384, [1, 256, 65536, 16777216], 384);
-        hash.update(ParsedPok.Value);
-        var dataStream = fs.createReadStream(path);
-        dataStream.on('data',function(data){
-            hash.update(data);
-        });
-        dataStream.on('end',function(data){
-            var digest = hash.arrayBuffer();
-            var pk = self.crypt.secp384r1.getPublicKey(self.crypt.bufferToBigInt(digest));
-            ParsedPok.Valid = self.crypt.secp384r1.verify(ParsedPok,pk);
-            callback(ParsedPok);
-        });
-    }
-    this.broadcast = function(typ,data) {
-        var bdata = Buffer.concat([Buffer.from([(typ&127)+128]),data]);
-        var peers = Object.values(this.Peers);
-        for (var i=0; i<peers.length; i++) {
-            peers[i].send(bdata);
         }
     }
-    this.PeerServer = undefined;
+    this.parse = function(bffr,callback) {
+        var Streams = self.newWorkerStream();
+        Streams.Input.end(bffr);
+        var body = "";
+        Streams.Output.on('data',function(data){
+            body += data;
+        });
+        Streams.Output.on('close',function(){
+            callback(JSON.parse(body));
+        });
+    }
+    this.socket = dgram.createSocket("udp4");
+    this.socket.MTU = 65507;
     this.Peers = {};
-    this.Peer = function(connection,ID,IP) {
-        var thisPeer = this;
-        this.Connection = connection;
-        this.Adress = null;
-        this.ID = ID;
-        this.IP = IP;
-        this.VerifyValue = self.crypt.randomBytes(48);
-        this.ProtocallStep = 0;
-        this.verifyProofOfAgreementCallback = null;
-        this.verifyProofOfAgreement = function(adrs,callback) {
-            thisPeer.verifyProofOfAgreementCallback = callback;
-            self.proofOfAgreement(thisPeer.VerifyValue,adrs,function(proof){
-                thisPeer.Connection.write(Buffer.concat([Buffer.from([2]),proof]));
-            })
-        }
-        this.send = function(data) {
-            thisPeer.Connection.write(data);
-        }
-    }
-    this.connectToPeer = function(IPadress,callback) {
-        if (!PrivateKey) {
-            throw new Error("No private key supplied, add a PrivateKey value in the config for new KryptCoin(config)");
-        }
-        var callbackcalled = false;
-        var PeerID = null;
-        var req = net.connect({port: 8343, host: IPadress},function(){
-            PeerID = IPadress+":"+req.localPort;
-            self.Peers[PeerID] = new self.Peer(req,PeerID,IPadress);
-            req.write(Buffer.concat([Buffer.from([0]),self.Peers[PeerID].VerifyValue]));
+    if (DC) {
+        this.DiscoveryChannel = DC();
+        this.DiscoveryChannel.on('peer',function(ch,info){
+            self.connectToPeer(info);
         });
-        req.on('data',function(data){
-            var response = self.PeerProtocall(data,self.Peers[PeerID],function(resp){
-                req.write(resp);
-            });
-            if (response) {
-                req.write(response);
-            } else {
-                if (self.Peers[PeerID].ProtocallStep === 2) {
-                    if (!callbackcalled) {
-                        callbackcalled = true;
-                        setTimeout(function(){
-                            callback(self.Peers[PeerID]);
-                        },1000);
-                    }
-                }
+    }
+    this.broadcast = function(bffr) {
+        var prs = Object.values(self.Peers);
+        for (var i=0; i<prs.length; i++) {
+            if (prs[i].send instanceof Function && prs[i].Identified) {
+                prs[i].send(bffr);
             }
-        });
-        req.on('end',function(){
-            delete self.Peers[IPadress+":"+req.localPort];
-        });
+        }
     }
-    this.PeerProtocall = function(data,peer,callback) {
-        if (data[0] === 0) {
-            data = data.slice(1);
-            var result = Buffer.concat([Buffer.from([1]),self.crypt.bigIntToBuffer(BigInt(self.crypt.secp256k1.sign(data,PrivateKey).Signiture))]);
-            peer.ProtocallStep = 1;
-            return result;
-        } else if (data[0] === 1) {
-            data = data.slice(1);
-            var Signiture = {
-                Message:peer.VerifyValue,
-                Signiture:"0x"+self.crypt.bufferToBigInt(data).toString(16)
-            };
-            peer.ProtocallStep = 2;
-            peer.Adress = self.crypt.secp256k1.toAdress(self.crypt.secp256k1.recoverPublicKey(Signiture));
-            console.log("New Peer Identified");
-            console.log(peer.ID+" : "+peer.Adress);
-        } else if (data[0] === 2) {
-            data = data.slice(1);
-            peer.ProtocallStep = 3;
-            var ProofOfAgreement = self.parseProofOfAgreement(data);
-            self.verifyProofOfAgreement(ProofOfAgreement,function(proof){
-                if (proof.Valid) {
-                    var bfrdata = Buffer.concat([Buffer.from([129]),data]);
-                    self.write(bfrdata,proof.FromAdress);
-                    self.proofOfAgreement(proof.Value,proof.ValidationAdress,function(proof2){
-                        bfrdata = Buffer.concat([Buffer.from([129]),proof2]);
-                        self.write(bfrdata,self.Adress);
-                        callback(Buffer.concat([Buffer.from([3]),proof2]));
-                    });
-                } else {
-                    callback(Buffer.from([3]));
-                }
-            })
-        } else if (data[0] === 3) {
-            data = data.slice(1);
-            if (data.length <= 0) {
-                console.log("Invalid Proof of Agreement receved");
-            } else {
-                var ProofOfAgreement = self.parseProofOfAgreement(data);
-                if (self.crypt.bufferToBigInt(peer.VerifyValue) !== self.crypt.bufferToBigInt(ProofOfAgreement.Value)) {
-                    console.log("Invalid Proof of Agreement receved");
-                } else {
-                    self.verifyProofOfAgreement(ProofOfAgreement,function(proof){
-                        if (proof.Valid && peer.verifyProofOfAgreementCallback instanceof Function) {
-                            peer.verifyProofOfAgreementCallback(ProofOfAgreement);
-                            peer.verifyProofOfAgreementCallback = undefined;
+    this.bufferEqual = function(a,b) {
+        if (a.length !== b.length) {
+            return false;
+        }
+        for (var i=0; i<a.length; i++) {
+            if (a[i] !== b[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+    this.connectToPeer = function(info) {
+        self.dataProtocall(Buffer.alloc(0),{address:info.host,port:info.port});
+    }
+    this.dataProtocall = function(data,info) {
+        var PeerID = info.address+":"+info.port;
+        if (!self.Peers[PeerID]) {
+            self.Peers[PeerID] = {
+                IP: info.address,
+                Port: info.port,
+                ID: PeerID,
+                Adress: null,
+                TimeLastSeen: new Date(),
+                ValidationValue: crypto.randomBytes(32),
+                Identified: false,
+                send: function(b) {
+                    self.socket.send(b,0,b.length,self.Peers[PeerID].Port,self.Peers[PeerID].IP,function(err){
+                        if (err) {
+                            console.log(err);
                         }
                     });
-                }
-            }
-        } else if (data[0] >= 128) {
-            if (data[0] == 128) {
-                var Txn = self.parseSignedTx(data.slice(1));
-                self.write(data,Txn.To);
-                self.clear(data,Txn.From);
-            }
-        }
-    }
-    this.StartPeerService = function() {
-        if (self.PeerServer) {
-            throw new Error("Server already started!");
+                },
+                Timeout:setTimeout(function(){
+                    if (!self.Peers[PeerID].Identified) {
+                        delete self.Peers[PeerID];
+                    }
+                },10000)
+            };
+            var b = Buffer.concat([Buffer.alloc(1),self.Peers[PeerID].ValidationValue]);
+            self.Peers[PeerID].send(b);
         } else {
-            self.PeerServer = net.createServer({allowHalfOpen:true},function(socket){
-                var IP = socket.remoteAddress.replaceAll("::ffff:","");
-                var PeerID = IP+":"+socket.remotePort;
-                self.Peers[PeerID] = new self.Peer(socket,PeerID,IP);
-                setTimeout(function(){
-                    socket.write(Buffer.concat([Buffer.from([0]),self.Peers[PeerID].VerifyValue]));
-                },1000);
-                socket.on('data',function(data){
-                    var response = self.PeerProtocall(data,self.Peers[PeerID],function(resp){
-                        socket.write(resp);
-                    });
-                    if (response) {
-                        socket.write(response);
+            // if (data.length <= 0) {
+            //     return;
+            // }
+            // console.log(self.Peers[PeerID]);
+            if (!self.Peers[PeerID].Identified && (data[0] !== 0 && data[0] !== 1)) {
+                self.Peers[PeerID].ValidationValue = crypto.randomBytes(32);
+                self.Peers[PeerID].send(Buffer.concat([Buffer.alloc(1),self.Peers[PeerID].ValidationValue]));
+                return;
+            }
+            self.Peers[PeerID].TimeLastSeen = new Date();
+            if (data[0] == 0) {
+                data = data.slice(1);
+                var head = Buffer.alloc(1);
+                head[0] = 1;
+                self.Peers[PeerID].send(Buffer.concat([head,self.signBuffer(data,PrivateKey)]));
+            } else if (data[0] == 1) {
+                data = data.slice(1);
+                var signiture = self.crypt.BufferToSignedMessage(data);
+                if (self.bufferEqual(signiture.Message,self.Peers[PeerID].ValidationValue)) {
+                    self.Peers[PeerID].Adress = self.crypt.secp256k1.toAdress(self.crypt.secp256k1.recoverPublicKey(signiture));
+                    var tf = !self.Peers[PeerID].Identified;
+                    self.Peers[PeerID].Identified = true;
+                    if (tf) {
+                        self.emit('peer',self.Peers[PeerID]);
+                    }
+                } else {
+                    delete self.Peers[PeerID];
+                }
+            } else if (data[0] == 128) {
+                self.parse(data,function(Txn){
+                    self.emit('txn',Txn);
+                });
+            } else if (data[0] == 129) {
+                self.parse(data,function(msg){
+                    if (msg.Dec) {
+                        self.emit('message',msg);
+                        self.emit('message-receved',msg);
+                    } else {
+                        self.emit('message',msg);
                     }
                 });
-                socket.on('end',function(){
-                    delete self.Peers[PeerID];
+            } else if (data[0] == 131) {
+                self.parse(data,function(con){
+                    self.emit('contract',con);
                 });
-            })
-            self.PeerServer.listen(8343,function(err){
-                if (err) {
-                    throw new Error("Error starting Server");
-                }
-            })
-        }
-    }
-    this.scanInternetForPeers = function(noScanIPs,callback) {
-        var found = [];
-        var count = 0;
-        var tried = 0;
-        var callbackNotFired = true;
-        var loop = setInterval(function(){
-            count++;
-            if (count >= 65535) {
-                console.log("Done pinging! waiting for pending pings to come back...");
-                clearInterval(loop);
             }
-            // var ip = [70,92,count&255,(count>>8)&255].join(".");
-            var ip = [70,92,(count>>8)&255,count&255].join(".");
-            var connected = false;
-            var req = net.connect({port: 8343, host: ip},function(){
-                found.push(ip);
-                connected = true;
-                tried++;
-                req.end();
-                delete req;
-            });
-            req.on('error',function(){});
-            setTimeout(function(){
-                if (!connected) {
-                    req.end();
-                    delete req;
-                    tried++;
-                }
-                if (tried%500 === 0) {
-                    // console.log((tried/4294967296).toFixed(3)+"%");
-                    console.clear();
-                    console.log((tried/655.35).toFixed(3)+"%");
-                    console.log("Count: "+count.toString());
-                    console.log("Tries: "+tried.toString());
-                    console.log("Sucsesses: "+found.length.toString());
-                    console.log("Sucsess Ratio: "+((found.length*100)/tried).toFixed(3)+"%");
-                    console.log("Current IP: "+ip);
-                }
-                // if (tried >= 4294967296) {
-                if (tried >= 65535 && callbackNotFired) {
-                    callbackNotFired = false;
-                    callback(found);
-                }
-            },500);
-        },2);
-    }
-    this.StopPeerService = function() {
-        if (self.PeerServer) {
-            self.PeerServer.close();
-            self.PeerServer = undefined;
-        } else {
-            throw new Error("Server already closed!");
         }
+    }
+    this.socket.on('message',self.dataProtocall);
+    this.startPeerService = function(port,callback) {
+        if (this.DiscoveryChannel) {
+            this.DiscoveryChannel.join("KryptCoin",port || 8343);
+        }
+        self.socket.bind(port || 8343,"0.0.0.0",function(){
+            if (callback instanceof Function) {
+                callback();
+            }
+        });
+    }
+    this.stopPeerService = function(callback) {
+        if (this.DiscoveryChannel) {
+            this.DiscoveryChannel.leave("KryptCoin");
+        }
+        self.socket.close(function(){
+            if (callback instanceof Function) {
+                callback();
+            }
+        });
+    }
+    this.startTerminalInterface = function() {
+        var rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout,
+            completer:function(line) {
+                return ['1','2'];
+            }
+        });
     }
 }
+util.inherits(KryptCoin, events.EventEmitter);
 if (typeof window === 'undefined') {
-	module.exports = KryptCoin;
+    module.exports = KryptCoin;
 }
